@@ -1,6 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 :root {
   --bg: #0f1117;
@@ -11,7 +17,7 @@
   --text: #e2e8f0;
   --text2: #94a3b8;
   --border: #2d3154;
-  --shadow: 0 4px 24px rgba(0,0,0,0.5);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   --radius: 12px;
 }
 
@@ -25,7 +31,11 @@ body {
 }
 
 /* ─── Layout ─── */
-#app { display: flex; flex-direction: column; height: 100vh; }
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
 
 #toolbar {
   display: flex;
@@ -100,12 +110,29 @@ body {
   font-family: inherit;
   transition: all 0.2s;
 }
-.part-btn:hover { border-color: var(--accent); background: #2a2d45; transform: translateY(-1px); }
-.part-btn.active { border-color: var(--accent); background: rgba(108,99,255,0.2); }
-.part-btn .icon { font-size: 24px; line-height: 1; }
+
+.part-btn:hover {
+  border-color: var(--accent);
+  background: #2a2d45;
+  transform: translateY(-1px);
+}
+
+.part-btn.active {
+  border-color: var(--accent);
+  background: rgba(108, 99, 255, 0.2);
+}
+
+.part-btn .icon {
+  font-size: 24px;
+  line-height: 1;
+}
 
 /* Transform buttons */
-#transform-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+#transform-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
 
 .tool-btn {
   flex: 1;
@@ -124,12 +151,29 @@ body {
   gap: 3px;
   transition: all 0.2s;
 }
-.tool-btn:hover { border-color: var(--accent); background: #2a2d45; }
-.tool-btn.active { border-color: var(--accent); background: rgba(108,99,255,0.2); }
-.tool-btn .icon { font-size: 16px; }
+
+.tool-btn:hover {
+  border-color: var(--accent);
+  background: #2a2d45;
+}
+
+.tool-btn.active {
+  border-color: var(--accent);
+  background: rgba(108, 99, 255, 0.2);
+}
+
+.tool-btn .icon {
+  font-size: 16px;
+}
 
 /* Color picker */
-#color-section label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--text2); }
+#color-section label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text2);
+}
+
 #color-picker {
   width: 100%;
   height: 36px;
@@ -140,8 +184,34 @@ body {
   padding: 2px;
 }
 
+/* Preset color swatches */
+#preset-colors {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.preset-color {
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.15s, border-color 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.preset-color:hover {
+  transform: scale(1.1);
+  border-color: #fff;
+}
+
 /* Action buttons */
-#action-btns { display: flex; flex-direction: column; gap: 6px; }
+#action-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
 .action-btn {
   background: var(--panel2);
@@ -155,8 +225,16 @@ body {
   transition: all 0.2s;
   text-align: left;
 }
-.action-btn:hover { border-color: var(--text2); background: #2a2d45; }
-.action-btn.danger:hover { border-color: var(--accent2); color: var(--accent2); }
+
+.action-btn:hover {
+  border-color: var(--text2);
+  background: #2a2d45;
+}
+
+.action-btn.danger:hover {
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
 
 /* ─── Canvas ─── */
 #canvas-container {
@@ -164,7 +242,12 @@ body {
   position: relative;
   overflow: hidden;
 }
-#three-canvas { display: block; width: 100% !important; height: 100% !important; }
+
+#three-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
 
 /* ─── Game Mode button (toolbar) ─── */
 #btn-play {
@@ -181,7 +264,11 @@ body {
   transition: all 0.2s;
   white-space: nowrap;
 }
-#btn-play:hover { opacity: 0.85; transform: scale(1.04); }
+
+#btn-play:hover {
+  opacity: 0.85;
+  transform: scale(1.04);
+}
 
 /* ─── Game HUD ─── */
 #game-hud {
@@ -191,7 +278,10 @@ body {
   z-index: 200;
   pointer-events: none;
 }
-#game-hud.active { display: block; }
+
+#game-hud.active {
+  display: block;
+}
 
 #hud-top {
   pointer-events: all;
@@ -199,7 +289,7 @@ body {
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(15,17,23,0.85);
+  background: rgba(15, 17, 23, 0.85);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -209,7 +299,11 @@ body {
   color: var(--text2);
   line-height: 1.7;
 }
-#hud-top strong { color: var(--text); font-size: 15px; }
+
+#hud-top strong {
+  color: var(--text);
+  font-size: 15px;
+}
 
 #btn-exit {
   pointer-events: all;
@@ -227,24 +321,41 @@ body {
   font-family: inherit;
   transition: all 0.2s;
 }
-#btn-exit:hover { opacity: 0.85; }
+
+#btn-exit:hover {
+  opacity: 0.85;
+}
 
 #crosshair {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%,-50%);
+  transform: translate(-50%, -50%);
   width: 20px;
   height: 20px;
   pointer-events: none;
 }
-#crosshair::before, #crosshair::after {
+
+#crosshair::before,
+#crosshair::after {
   content: '';
   position: absolute;
-  background: rgba(255,255,255,0.7);
+  background: rgba(255, 255, 255, 0.7);
 }
-#crosshair::before { width: 2px; height: 100%; top: 0; left: 9px; }
-#crosshair::after  { width: 100%; height: 2px; top: 9px; left: 0; }
+
+#crosshair::before {
+  width: 2px;
+  height: 100%;
+  top: 0;
+  left: 9px;
+}
+
+#crosshair::after {
+  width: 100%;
+  height: 2px;
+  top: 9px;
+  left: 0;
+}
 
 /* ─── Info chip ─── */
 .info-chip {
@@ -252,7 +363,7 @@ body {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(15,17,23,0.8);
+  background: rgba(15, 17, 23, 0.8);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 14px;
@@ -263,6 +374,15 @@ body {
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}

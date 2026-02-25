@@ -276,6 +276,15 @@ document.getElementById('color-picker').addEventListener('input', e => {
     if (selectedObj) selectedObj.material.color.set(currentColor);
 });
 
+// Preset Colors
+document.querySelectorAll('.preset-color').forEach(btn => {
+    btn.addEventListener('click', () => {
+        currentColor = btn.dataset.color;
+        document.getElementById('color-picker').value = currentColor;
+        if (selectedObj) selectedObj.material.color.set(currentColor);
+    });
+});
+
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
     keys[e.code] = true;
@@ -300,8 +309,12 @@ document.getElementById('btn-clear').addEventListener('click', () => {
     tfCtrl.detach(); selectedObj = null;
 });
 
-/* ─── Save / Load ─── */
+/* ─── Save / Load (.json file) ─── */
 document.getElementById('btn-save').addEventListener('click', () => {
+    if (sceneObjects.length === 0) {
+        showToast('⚠ 保存する部材がありません');
+        return;
+    }
     const data = sceneObjects.map(m => ({
         type: m.userData.partType,
         color: '#' + m.material.color.getHexString(),
@@ -309,23 +322,53 @@ document.getElementById('btn-save').addEventListener('click', () => {
         rot: [m.rotation.x, m.rotation.y, m.rotation.z],
         scl: m.scale.toArray(),
     }));
-    localStorage.setItem('3d-scene-v1', JSON.stringify(data));
-    showToast('💾 保存しました！');
+
+    // Create JSON blob and trigger download
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'my_3d_work.json';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast('💾 ファイルをダウンロードしました');
 });
 
+const fileInput = document.getElementById('file-input');
 document.getElementById('btn-load').addEventListener('click', () => {
-    const raw = localStorage.getItem('3d-scene-v1');
-    if (!raw) { showToast('⚠ 保存データなし'); return; }
-    sceneObjects.forEach(m => scene.remove(m));
-    sceneObjects = []; undoStack = []; tfCtrl.detach(); selectedObj = null;
-    JSON.parse(raw).forEach(d => {
-        const m = makePart(d.type, d.color);
-        m.position.fromArray(d.pos);
-        m.rotation.set(d.rot[0], d.rot[1], d.rot[2]);
-        m.scale.fromArray(d.scl);
-        scene.add(m); sceneObjects.push(m);
-    });
-    showToast('📂 読み込みました！');
+    fileInput.click();
+});
+
+fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        try {
+            const data = JSON.parse(event.target.result);
+            // Clear current scene
+            sceneObjects.forEach(m => scene.remove(m));
+            sceneObjects = []; undoStack = []; tfCtrl.detach(); selectedObj = null;
+
+            // Rebuild scene
+            data.forEach(d => {
+                const m = makePart(d.type, d.color);
+                m.position.fromArray(d.pos);
+                m.rotation.set(d.rot[0], d.rot[1], d.rot[2]);
+                m.scale.fromArray(d.scl);
+                scene.add(m); sceneObjects.push(m);
+            });
+            showToast('📂 ファイルを読み込みました！');
+        } catch (err) {
+            console.error(err);
+            showToast('❌ ファイルの読み込みに失敗しました');
+        }
+    };
+    reader.readAsText(file);
+    // Reset input so the same file can be loaded again if needed
+    e.target.value = '';
 });
 
 function showToast(msg) {

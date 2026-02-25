@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -17,124 +18,144 @@
   }
   </script>
 </head>
+
 <body>
-<div id="app">
+  <div id="app">
 
-  <!-- ═══════════════ TOOLBAR ═══════════════ -->
-  <header id="toolbar">
-    <h1>🎨 3D お絵描き遊び場</h1>
+    <!-- ═══════════════ TOOLBAR ═══════════════ -->
+    <header id="toolbar">
+      <h1>🎨 3D お絵描き遊び場</h1>
 
-    <!-- Transform tools -->
-    <div style="display:flex;gap:6px;align-items:center;">
-      <button class="tool-btn active" data-mode="translate" title="移動 (G)">
-        <span class="icon">✥</span>移動
-      </button>
-      <button class="tool-btn" data-mode="rotate" title="回転 (R)">
-        <span class="icon">↻</span>回転
-      </button>
-      <button class="tool-btn" data-mode="scale" title="拡縮 (S)">
-        <span class="icon">⤡</span>拡縮
-      </button>
-    </div>
+      <!-- Transform tools -->
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="tool-btn active" data-mode="translate" title="移動 (G)">
+          <span class="icon">✥</span>移動
+        </button>
+        <button class="tool-btn" data-mode="rotate" title="回転 (R)">
+          <span class="icon">↻</span>回転
+        </button>
+        <button class="tool-btn" data-mode="scale" title="拡縮 (S)">
+          <span class="icon">⤡</span>拡縮
+        </button>
+      </div>
 
-    <button id="btn-play">🎮 ゲームを始める</button>
-  </header>
+      <button id="btn-play">🎮 ゲームを始める</button>
+    </header>
 
-  <!-- ═══════════════ MAIN ═══════════════ -->
-  <div id="main">
+    <!-- ═══════════════ MAIN ═══════════════ -->
+    <div id="main">
 
-    <!-- ─── Side panel ─── -->
-    <aside id="side-panel">
+      <!-- ─── Side panel ─── -->
+      <aside id="side-panel">
 
-      <!-- Part palette -->
-      <div class="panel-section">
-        <h3>🧱 部材パレット</h3>
-        <div id="part-palette">
-          <button class="part-btn active" data-part="board">
-            <span class="icon">▬</span>板
-          </button>
-          <button class="part-btn" data-part="hemisphere">
-            <span class="icon">⌓</span>半球
-          </button>
-          <button class="part-btn" data-part="triangle">
-            <span class="icon">△</span>三角板
-          </button>
-          <button class="part-btn" data-part="column">
-            <span class="icon">⬛</span>柱
-          </button>
-          <button class="part-btn" data-part="sphere">
-            <span class="icon">●</span>球
-          </button>
-          <button class="part-btn" data-part="box">
-            <span class="icon">◼</span>箱
-          </button>
+        <!-- Part palette -->
+        <div class="panel-section">
+          <h3>🧱 部材パレット</h3>
+          <div id="part-palette">
+            <button class="part-btn active" data-part="board">
+              <span class="icon">▬</span>板
+            </button>
+            <button class="part-btn" data-part="hemisphere">
+              <span class="icon">⌓</span>半球
+            </button>
+            <button class="part-btn" data-part="triangle">
+              <span class="icon">△</span>三角板
+            </button>
+            <button class="part-btn" data-part="column">
+              <span class="icon">⬛</span>柱
+            </button>
+            <button class="part-btn" data-part="sphere">
+              <span class="icon">●</span>球
+            </button>
+            <button class="part-btn" data-part="box">
+              <span class="icon">◼</span>箱
+            </button>
+          </div>
+          <p style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5;">
+            部材を選んでクリックで配置。<br>次に移動ツールで位置調整。
+          </p>
         </div>
-        <p style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5;">
-          部材を選んでクリックで配置。<br>次に移動ツールで位置調整。
-        </p>
-      </div>
 
-      <!-- Color -->
-      <div class="panel-section" id="color-section">
-        <h3>🎨 カラー</h3>
-        <label>選択中の部材の色</label>
-        <input type="color" id="color-picker" value="#6c63ff" />
-      </div>
+        <!-- Color -->
+        <div class="panel-section" id="color-section">
+          <h3>🎨 カラー</h3>
+          <label>選択中の部材の色</label>
+          <input type="color" id="color-picker" value="#6c63ff" />
 
-      <!-- Actions -->
-      <div class="panel-section">
-        <h3>🛠 操作</h3>
-        <div id="action-btns">
-          <button class="action-btn danger" id="btn-delete">🗑 選択を削除 [Del]</button>
-          <button class="action-btn" id="btn-undo">↩ 元に戻す [Ctrl+Z]</button>
-          <button class="action-btn" id="btn-clear">🧹 全部消す</button>
-          <button class="action-btn" id="btn-save">💾 保存</button>
-          <button class="action-btn" id="btn-load">📂 読み込む</button>
+          <!-- Preset Colors -->
+          <div id="preset-colors" style="display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;margin-top:8px;">
+            <!-- 12 colors requested: 赤、青、黄、緑、黒、白、茶、黄緑、水色、ピンク、オレンジ、紫 -->
+            <div class="preset-color" style="background:#ff0000;" data-color="#ff0000" title="赤"></div>
+            <div class="preset-color" style="background:#0000ff;" data-color="#0000ff" title="青"></div>
+            <div class="preset-color" style="background:#ffff00;" data-color="#ffff00" title="黄"></div>
+            <div class="preset-color" style="background:#008000;" data-color="#008000" title="緑"></div>
+            <div class="preset-color" style="background:#000000;" data-color="#000000" title="黒"></div>
+            <div class="preset-color" style="background:#ffffff;" data-color="#ffffff" title="白"></div>
+            <div class="preset-color" style="background:#8b4513;" data-color="#8b4513" title="茶"></div>
+            <div class="preset-color" style="background:#9acd32;" data-color="#9acd32" title="黄緑"></div>
+            <div class="preset-color" style="background:#00ffff;" data-color="#00ffff" title="水色"></div>
+            <div class="preset-color" style="background:#ffc0cb;" data-color="#ffc0cb" title="ピンク"></div>
+            <div class="preset-color" style="background:#ffa500;" data-color="#ffa500" title="オレンジ"></div>
+            <div class="preset-color" style="background:#800080;" data-color="#800080" title="紫"></div>
+          </div>
         </div>
-      </div>
 
-      <!-- Cheat sheet -->
-      <div class="panel-section">
-        <h3>⌨ キー操作</h3>
-        <p style="font-size:10px;color:#64748b;line-height:1.8;">
-          マウスドラッグ　: カメラ回転<br>
-          スクロール　　　: ズーム<br>
-          右ドラッグ　　　: カメラ移動<br>
-          Delete / Backspace: 削除<br>
-          Ctrl + Z　　　　: 元に戻す
-        </p>
-      </div>
+        <!-- Actions -->
+        <div class="panel-section">
+          <h3>🛠 操作</h3>
+          <div id="action-btns">
+            <button class="action-btn danger" id="btn-delete">🗑 選択を削除 [Del]</button>
+            <button class="action-btn" id="btn-undo">↩ 元に戻す [Ctrl+Z]</button>
+            <button class="action-btn" id="btn-clear">🧹 全部消す</button>
+            <button class="action-btn" id="btn-save">💾 ファイルに書き出し (.json)</button>
+            <button class="action-btn" id="btn-load">📂 ファイルから読み込み</button>
+            <input type="file" id="file-input" accept=".json" style="display:none;" />
+          </div>
+        </div>
 
-    </aside>
+        <!-- Cheat sheet -->
+        <div class="panel-section">
+          <h3>⌨ キー操作</h3>
+          <p style="font-size:10px;color:#64748b;line-height:1.8;">
+            マウスドラッグ　: カメラ回転<br>
+            スクロール　　　: ズーム<br>
+            右ドラッグ　　　: カメラ移動<br>
+            Delete / Backspace: 削除<br>
+            Ctrl + Z　　　　: 元に戻す
+          </p>
+        </div>
 
-    <!-- ─── Canvas ─── -->
-    <div id="canvas-container">
-      <canvas id="three-canvas"></canvas>
-      <div class="info-chip" id="draw-hint">
-        💡 部材パレットから形を選んでクリックで配置！
-      </div>
-      <!-- Toast -->
-      <div id="toast" style="
+      </aside>
+
+      <!-- ─── Canvas ─── -->
+      <div id="canvas-container">
+        <canvas id="three-canvas"></canvas>
+        <div class="info-chip" id="draw-hint">
+          💡 部材パレットから形を選んでクリックで配置！
+        </div>
+        <!-- Toast -->
+        <div id="toast" style="
         position:absolute;top:20px;left:50%;transform:translateX(-50%);
         background:rgba(15,17,23,0.9);border:1px solid #2d3154;border-radius:10px;
         padding:10px 22px;font-size:14px;font-weight:700;color:#e2e8f0;
         opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:300;white-space:nowrap;
       "></div>
+      </div>
+
+    </div><!-- #main -->
+  </div><!-- #app -->
+
+  <!-- ═══════════════ GAME HUD ═══════════════ -->
+  <div id="game-hud">
+    <div id="hud-top">
+      <strong>🏃 ちびっこ探検モード</strong><br>
+      WASD / 矢印：移動 &nbsp;|&nbsp; スペース：ジャンプ &nbsp;|&nbsp; マウス：カメラ &nbsp;|&nbsp; ESC：戻る
     </div>
-
-  </div><!-- #main -->
-</div><!-- #app -->
-
-<!-- ═══════════════ GAME HUD ═══════════════ -->
-<div id="game-hud">
-  <div id="hud-top">
-    <strong>🏃 ちびっこ探検モード</strong><br>
-    WASD / 矢印：移動 &nbsp;|&nbsp; スペース：ジャンプ &nbsp;|&nbsp; マウス：カメラ &nbsp;|&nbsp; ESC：戻る
+    <div id="crosshair"></div>
+    <button id="btn-exit">✕ お絵描きに戻る</button>
   </div>
-  <div id="crosshair"></div>
-  <button id="btn-exit">✕ お絵描きに戻る</button>
-</div>
 
-<script type="module" src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
+
 </html>
