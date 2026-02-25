@@ -28,6 +28,80 @@ let holeMode = null;   // 'box' | 'hemisphere' | 'sphere' | null
 const csgEvaluator = new Evaluator();
 csgEvaluator.attributes = ['position', 'normal'];
 
+/* ─── Ghost (preview) mesh for hole tool ─── */
+let ghostMesh = null;   // semi-transparent preview mesh
+
+function getHoleSizes() {
+    return {
+        sx: parseFloat(document.getElementById('hole-sx').value),
+        sy: parseFloat(document.getElementById('hole-sy').value),
+        sz: parseFloat(document.getElementById('hole-sz').value),
+    };
+}
+
+function makeHoleGeo(mode, sx, sy, sz) {
+    let geo;
+    if (mode === 'box') {
+        geo = new THREE.BoxGeometry(sx, sy, sz);
+    } else if (mode === 'hemisphere') {
+        // LatheGeometry で頂点を共有した完全水密の半球を生成
+        // ドームのプロファイル: 北極 (0, 0.5) → 赤道 (0.5, 0) → 底面中心 (0, 0)
+        const N = 16;
+        const pts = [];
+        for (let i = 0; i <= N; i++) {
+            const phi = (i / N) * (Math.PI / 2);
+            pts.push(new THREE.Vector2(Math.sin(phi) * 0.5, Math.cos(phi) * 0.5));
+        }
+        pts.push(new THREE.Vector2(0, 0)); // 底面の中心で閉じる
+        geo = new THREE.LatheGeometry(pts, 32);
+    } else {
+        geo = new THREE.SphereGeometry(0.5, 32, 16);
+    }
+    return geo;
+}
+
+function getHoleScale(mode, sx, sy, sz) {
+    // Box: dimensions are already baked. Sphere/Hemi: scale unit sphere.
+    if (mode === 'box') return new THREE.Vector3(1, 1, 1);
+    return new THREE.Vector3(sx, sy, sz);
+}
+
+function updateGhostGeo() {
+    if (!ghostMesh) return;
+    const { sx, sy, sz } = getHoleSizes();
+    ghostMesh.geometry.dispose();
+    ghostMesh.geometry = makeHoleGeo(holeMode, sx, sy, sz);
+    const s = getHoleScale(holeMode, sx, sy, sz);
+    ghostMesh.scale.copy(s);
+}
+
+function showGhost() {
+    if (ghostMesh) {
+        scene.remove(ghostMesh);
+        ghostMesh.geometry.dispose();
+        ghostMesh = null;
+    }
+    if (!holeMode) return;
+    const { sx, sy, sz } = getHoleSizes();
+    const geo = makeHoleGeo(holeMode, sx, sy, sz);
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xff4444,
+        transparent: true,
+        opacity: 0.35,
+        depthWrite: false,
+        wireframe: false,
+    });
+    ghostMesh = new THREE.Mesh(geo, mat);
+    const s = getHoleScale(holeMode, sx, sy, sz);
+    ghostMesh.scale.copy(s);
+    ghostMesh.visible = false;  // hidden until mouse hits something
+    scene.add(ghostMesh);
+}
+
+function hideGhost() {
+    if (ghostMesh) ghostMesh.visible = false;
+}
+
 /* ─── Player state ─── */
 const player = { vel: new THREE.Vector3(), onGround: false, yaw: 0, pitch: 0 };
 const keys = {};
@@ -236,7 +310,24 @@ function undo() {
     }
 }
 
-/* ─── Canvas click ─── */
+/* ─── Canvas events ─── */
+canvas.addEventListener('pointermove', e => {
+    if (mode !== 'draw' || !holeMode || !ghostMesh) return;
+    const rect = canvas.getBoundingClientRect();
+    _mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    _mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(_mouse, drawCamera);
+    const hits = raycaster.intersectObjects(sceneObjects, false);
+    if (hits.length) {
+        ghostMesh.position.copy(hits[0].point);
+        ghostMesh.visible = true;
+    } else {
+        ghostMesh.visible = false;
+    }
+});
+
+canvas.addEventListener('pointerleave', () => { hideGhost(); });
+
 canvas.addEventListener('pointerdown', e => {
     if (mode !== 'draw' || tfCtrl.dragging) return;
     const rect = canvas.getBoundingClientRect();
@@ -260,62 +351,49 @@ canvas.addEventListener('pointerdown', e => {
 
 /* ─── Cut Hole (CSG) ─── */
 function cutHole(targetMesh, hitPoint) {
-    const size = parseFloat(document.getElementById('hole-size').value);
+    const { sx, sy, sz } = getHoleSizes();
 
-    // Create the brush for the target object
+    // Target brush in world space
     const targetBrush = new Brush(targetMesh.geometry);
     targetBrush.position.copy(targetMesh.position);
     targetBrush.rotation.copy(targetMesh.rotation);
     targetBrush.scale.copy(targetMesh.scale);
     targetBrush.updateMatrixWorld();
 
-    // Create the brush for the hole
-    let holeGeo;
-    if (holeMode === 'box') {
-        holeGeo = new THREE.BoxGeometry(size, size, size);
-    } else if (holeMode === 'hemisphere') {
-        holeGeo = new THREE.SphereGeometry(size / 2, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-    } else {
-        holeGeo = new THREE.SphereGeometry(size / 2, 32, 16);
-    }
+    // Hole brush: unit geometry scaled to sx/sy/sz at hit point
+    const holeGeo = makeHoleGeo(holeMode, sx, sy, sz);
     const holeBrush = new Brush(holeGeo);
     holeBrush.position.copy(hitPoint);
+    const hs = getHoleScale(holeMode, sx, sy, sz);
+    holeBrush.scale.copy(hs);
     holeBrush.updateMatrixWorld();
 
-    // Perform CSG subtraction
+    // CSG subtraction
     let resultMesh;
     try {
         resultMesh = csgEvaluator.evaluate(targetBrush, holeBrush, SUBTRACTION);
     } catch (err) {
-        console.error("CSG failed:", err);
-        showToast("⚠ 穴あけに失敗しました");
+        console.error('CSG failed:', err);
+        showToast('⚠ 穴あけに失敗しました');
         return;
     }
 
-    // Preserve original material and userData
-    // three-bvh-csg creates groups if multiple materials are involved, but we only have 1
     const newMesh = new THREE.Mesh(resultMesh.geometry, targetMesh.material.clone());
     newMesh.castShadow = true;
     newMesh.receiveShadow = true;
     newMesh.userData = { ...targetMesh.userData, csgMesh: true };
-    // result mesh from CSG is always centered at origin with world coordinates baked in
     newMesh.position.set(0, 0, 0);
     newMesh.rotation.set(0, 0, 0);
     newMesh.scale.set(1, 1, 1);
 
-    // Swap old with new
     scene.remove(targetMesh);
     sceneObjects = sceneObjects.filter(o => o !== targetMesh);
-
     scene.add(newMesh);
     sceneObjects.push(newMesh);
 
-    if (selectedObj === targetMesh) {
-        tfCtrl.detach();
-        selectedObj = null;
-    }
+    if (selectedObj === targetMesh) { tfCtrl.detach(); selectedObj = null; }
 
-    undoStack.push({ act: 'csg', oldMesh: targetMesh, newMesh: newMesh });
+    undoStack.push({ act: 'csg', oldMesh: targetMesh, newMesh });
     showToast('🕳️ 穴をあけました');
 }
 
@@ -329,6 +407,7 @@ document.querySelectorAll('.part-btn:not(.hole-btn)').forEach(btn => {
         selectedPart = btn.dataset.part;
         placingMode = true;
         holeMode = null;
+        hideGhost();
         document.querySelectorAll('.part-btn, .tool-btn[data-mode]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
     });
@@ -346,6 +425,17 @@ document.querySelectorAll('.hole-btn').forEach(btn => {
             selectedObj.material.emissive?.set(0x000000);
             selectedObj = null;
         }
+        showGhost(); // create/refresh ghost mesh for current hole type
+    });
+});
+
+// XYZ sliders — update ghost geometry live
+['hole-sx', 'hole-sy', 'hole-sz'].forEach(id => {
+    const el = document.getElementById(id);
+    const valEl = document.getElementById(id + '-val');
+    el.addEventListener('input', () => {
+        valEl.textContent = parseFloat(el.value).toFixed(1);
+        updateGhostGeo();
     });
 });
 
@@ -355,6 +445,7 @@ document.querySelectorAll('.tool-btn[data-mode]').forEach(btn => {
         tMode = btn.dataset.mode;
         placingMode = false;
         holeMode = null;
+        hideGhost();
         document.querySelectorAll('.tool-btn[data-mode], .part-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         if (selectedObj) tfCtrl.setMode(tMode);
@@ -547,37 +638,71 @@ document.addEventListener('mousemove', e => {
     player.pitch = Math.max(-Math.PI * 0.38, Math.min(Math.PI * 0.38, player.pitch));
 });
 
-/* ─── Collision ─── */
-const _aabb = new THREE.Box3();
-const _pBox = new THREE.Box3();
+/* ─── Raycast-based Collision (respects CSG holes) ─── */
+const _colRay = new THREE.Raycaster();
+_colRay.firstHitOnly = true;
+const _VEC_DOWN = new THREE.Vector3(0, -1, 0);
+const _VEC_UP = new THREE.Vector3(0, 1, 0);
 
 function resolveCollisions(pos, vel) {
     const r = PLAYER_R, h = PLAYER_H;
-
-    // 地面
     player.onGround = false;
-    if (pos.y < 0) { pos.y = 0; vel.y = Math.max(vel.y, 0); player.onGround = true; }
 
-    for (const obj of sceneObjects) {
-        _aabb.setFromObject(obj);
-        _pBox.min.set(pos.x - r, pos.y, pos.z - r);
-        _pBox.max.set(pos.x + r, pos.y + h, pos.z + r);
-        if (!_pBox.intersectsBox(_aabb)) continue;
+    // 地面 (y=0 の床)
+    if (pos.y <= 0.001) {
+        pos.y = 0;
+        vel.y = Math.max(vel.y, 0);
+        player.onGround = true;
+    }
+    if (!sceneObjects.length) return;
 
-        // 各軸のめり込み量
-        const dx1 = _pBox.max.x - _aabb.min.x, dx2 = _aabb.max.x - _pBox.min.x;
-        const dy1 = _pBox.max.y - _aabb.min.y, dy2 = _aabb.max.y - _pBox.min.y;
-        const dz1 = _pBox.max.z - _aabb.min.z, dz2 = _aabb.max.z - _pBox.min.z;
-        const minD = Math.min(dx1, dx2, dy1, dy2, dz1, dz2);
+    // ── 床: 足元から下向きレイ ──
+    _colRay.set(new THREE.Vector3(pos.x, pos.y + 0.15, pos.z), _VEC_DOWN);
+    const floorHits = _colRay.intersectObjects(sceneObjects, false)
+        .filter(hit => hit.distance <= 0.25);
+    if (floorHits.length && vel.y <= 0) {
+        pos.y = floorHits[0].point.y;
+        vel.y = 0;
+        player.onGround = true;
+    }
 
-        if (minD === dy2 && vel.y <= 0) { pos.y = _aabb.max.y; vel.y = 0; player.onGround = true; }
-        else if (minD === dy1 && vel.y > 0) { pos.y = _aabb.min.y - h; vel.y = 0; }
-        else if (minD === dx1) pos.x = _aabb.min.x - r - 0.001;
-        else if (minD === dx2) pos.x = _aabb.max.x + r + 0.001;
-        else if (minD === dz1) pos.z = _aabb.min.z - r - 0.001;
-        else if (minD === dz2) pos.z = _aabb.max.z + r + 0.001;
+    // ── 天井: 頭上から上向きレイ ──
+    _colRay.set(new THREE.Vector3(pos.x, pos.y + h - 0.05, pos.z), _VEC_UP);
+    const ceilHits = _colRay.intersectObjects(sceneObjects, false)
+        .filter(hit => hit.distance <= 0.2);
+    if (ceilHits.length && vel.y > 0) vel.y = 0;
+
+    // ── 壁: 4方向 × 3高さ の水平レイ ──
+    // 3サンプル中 2つ以上が壁に当たった方向だけ押し返す。
+    // 穴の部分ではレイが貫通するので当たり数が減り、押し返しが抑制される。
+    const wHeights = [pos.y + 0.2, pos.y + h * 0.45, pos.y + h * 0.8];
+    const wDirs = [
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(-1, 0, 0),
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(0, 0, -1),
+    ];
+    for (const dir of wDirs) {
+        let hitCount = 0;
+        let minDist = Infinity;
+        for (const wy of wHeights) {
+            _colRay.set(new THREE.Vector3(pos.x, wy, pos.z), dir);
+            const wallHits = _colRay.intersectObjects(sceneObjects, false)
+                .filter(hit => hit.distance < r + 0.04);
+            if (wallHits.length) {
+                hitCount++;
+                minDist = Math.min(minDist, wallHits[0].distance);
+            }
+        }
+        // 穴がある = 一部のレイが通り抜け → hitCount < 2 なら押し返さない
+        if (hitCount >= 2) {
+            const push = r + 0.04 - minDist;
+            pos.x -= dir.x * push;
+            pos.z -= dir.z * push;
+        }
     }
 }
+
 
 /* ─── Game tick (一人称・マインクラフト式) ─── */
 function tickGame(dt) {
