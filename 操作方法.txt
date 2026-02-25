@@ -1,5 +1,4 @@
-cd "/home/yosshii2/ドキュメント/AIでソフト開発/３Dお絵描き遊び場"
-python3 -m http.server 8080
-
-
-ブラウザで http://localhost:8080 を開く
+ファイルを入れたフォルダ内でターミナルを開き、
+Windowsは: python -m http.server 8080
+Linuxは: python3 -m http.server 8080
+とコマンドを打ち、ブラウザで http://localhost:8080 を開いてください。
