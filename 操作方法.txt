@@ -1,0 +1,5 @@
+cd "/home/yosshii2/ドキュメント/AIでソフト開発/３Dお絵描き遊び場"
+python3 -m http.server 8080
+
+
+ブラウザで http://localhost:8080 を開く

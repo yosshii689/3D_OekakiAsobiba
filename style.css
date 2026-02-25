@@ -1,0 +1,268 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --panel: #1a1d27;
+  --panel2: #22263a;
+  --accent: #6c63ff;
+  --accent2: #ff6584;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --border: #2d3154;
+  --shadow: 0 4px 24px rgba(0,0,0,0.5);
+  --radius: 12px;
+}
+
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ─── Layout ─── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+#toolbar h1 {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+#main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ─── Side Panel ─── */
+#side-panel {
+  width: 200px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 12px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  z-index: 50;
+}
+
+.panel-section h3 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text2);
+  margin-bottom: 10px;
+}
+
+/* Part buttons */
+#part-palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.part-btn {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 10px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.part-btn:hover { border-color: var(--accent); background: #2a2d45; transform: translateY(-1px); }
+.part-btn.active { border-color: var(--accent); background: rgba(108,99,255,0.2); }
+.part-btn .icon { font-size: 24px; line-height: 1; }
+
+/* Transform buttons */
+#transform-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.tool-btn {
+  flex: 1;
+  min-width: 52px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 7px 4px;
+  font-size: 10px;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: all 0.2s;
+}
+.tool-btn:hover { border-color: var(--accent); background: #2a2d45; }
+.tool-btn.active { border-color: var(--accent); background: rgba(108,99,255,0.2); }
+.tool-btn .icon { font-size: 16px; }
+
+/* Color picker */
+#color-section label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--text2); }
+#color-picker {
+  width: 100%;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  padding: 2px;
+}
+
+/* Action buttons */
+#action-btns { display: flex; flex-direction: column; gap: 6px; }
+
+.action-btn {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  transition: all 0.2s;
+  text-align: left;
+}
+.action-btn:hover { border-color: var(--text2); background: #2a2d45; }
+.action-btn.danger:hover { border-color: var(--accent2); color: var(--accent2); }
+
+/* ─── Canvas ─── */
+#canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+#three-canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* ─── Game Mode button (toolbar) ─── */
+#btn-play {
+  margin-left: auto;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+#btn-play:hover { opacity: 0.85; transform: scale(1.04); }
+
+/* ─── Game HUD ─── */
+#game-hud {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+}
+#game-hud.active { display: block; }
+
+#hud-top {
+  pointer-events: all;
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15,17,23,0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.7;
+}
+#hud-top strong { color: var(--text); font-size: 15px; }
+
+#btn-exit {
+  pointer-events: all;
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: var(--accent2);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+#btn-exit:hover { opacity: 0.85; }
+
+#crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%);
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+#crosshair::before, #crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(255,255,255,0.7);
+}
+#crosshair::before { width: 2px; height: 100%; top: 0; left: 9px; }
+#crosshair::after  { width: 100%; height: 2px; top: 9px; left: 0; }
+
+/* ─── Info chip ─── */
+.info-chip {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15,17,23,0.8);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text2);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
