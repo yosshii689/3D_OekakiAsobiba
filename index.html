@@ -92,26 +92,19 @@
             </button>
           </div>
 
-          <!-- XYZ size sliders -->
-          <div id="hole-size-panel" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
-            <div class="xyz-row">
-              <span class="xyz-label" style="color:#ff6b6b;">X</span>
-              <input type="range" id="hole-sx" min="0.3" max="6.0" step="0.1" value="2.0" class="xyz-slider">
-              <span class="xyz-val" id="hole-sx-val">2.0</span>
-            </div>
-            <div class="xyz-row">
-              <span class="xyz-label" style="color:#6bff6b;">Y</span>
-              <input type="range" id="hole-sy" min="0.3" max="6.0" step="0.1" value="2.0" class="xyz-slider">
-              <span class="xyz-val" id="hole-sy-val">2.0</span>
-            </div>
-            <div class="xyz-row">
-              <span class="xyz-label" style="color:#6baeff;">Z</span>
-              <input type="range" id="hole-sz" min="0.3" max="6.0" step="0.1" value="2.0" class="xyz-slider">
-              <span class="xyz-val" id="hole-sz-val">2.0</span>
-            </div>
+          <!-- Hole transform mode buttons -->
+          <div style="display:flex;gap:6px;margin-top:10px;">
+            <button class="tool-btn active" id="hole-btn-translate" title="位置を移動">
+              <span class="icon">✥</span>移動
+            </button>
+            <button class="tool-btn" id="hole-btn-scale" title="サイズを変更">
+              <span class="icon">⤡</span>サイズ
+            </button>
           </div>
           <p style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5;">
-            穴の種類を選ぶと透明なプレビューが表示されます。<br>クリックで確定。
+            穴種を選ぶとゴーストが出現。<br>
+            矢印ドラッグで調整し、<br>
+            <strong style="color:#e2e8f0;">Enter</strong> で確定、<strong style="color:#e2e8f0;">ESC</strong> でキャンセル。
           </p>
         </div>
 

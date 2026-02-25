@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Evaluator, Brush, SUBTRACTION } from 'three-bvh-csg';
 
 /* ─── Physics constants ─── */
@@ -24,82 +25,85 @@ let sceneObjects = [];
 let currentColor = '#6c63ff';
 let undoStack = [];
 let placingMode = false;
-let holeMode = null;   // 'box' | 'hemisphere' | 'sphere' | null
+let holeMode = null;    // 'box' | 'hemisphere' | 'sphere' | null
+let holeTMode = 'translate'; // 'translate' | 'scale'
 const csgEvaluator = new Evaluator();
 csgEvaluator.attributes = ['position', 'normal'];
 
 /* ─── Ghost (preview) mesh for hole tool ─── */
-let ghostMesh = null;   // semi-transparent preview mesh
+let ghostMesh = null;
 
-function getHoleSizes() {
-    return {
-        sx: parseFloat(document.getElementById('hole-sx').value),
-        sy: parseFloat(document.getElementById('hole-sy').value),
-        sz: parseFloat(document.getElementById('hole-sz').value),
-    };
-}
-
-function makeHoleGeo(mode, sx, sy, sz) {
-    let geo;
-    if (mode === 'box') {
-        geo = new THREE.BoxGeometry(sx, sy, sz);
-    } else if (mode === 'hemisphere') {
-        // LatheGeometry で頂点を共有した完全水密の半球を生成
-        // ドームのプロファイル: 北極 (0, 0.5) → 赤道 (0.5, 0) → 底面中心 (0, 0)
-        const N = 16;
-        const pts = [];
-        for (let i = 0; i <= N; i++) {
-            const phi = (i / N) * (Math.PI / 2);
-            pts.push(new THREE.Vector2(Math.sin(phi) * 0.5, Math.cos(phi) * 0.5));
-        }
-        pts.push(new THREE.Vector2(0, 0)); // 底面の中心で閉じる
-        geo = new THREE.LatheGeometry(pts, 32);
+/* ─── Hole geometry factory (unit scale; size controlled via ghostMesh.scale) ─── */
+function makeHoleGeo(holeType) {
+    if (holeType === 'box') {
+        return new THREE.BoxGeometry(1, 1, 1);
+    } else if (holeType === 'hemisphere') {
+        // ドーム (上半球) ＋ フタ (円盤) を結合して水密な半球を生成
+        const dome = new THREE.SphereGeometry(0.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+        const cap = new THREE.CircleGeometry(0.5, 32);
+        cap.rotateX(-Math.PI / 2); // y=0 の平面に置き、法線を下向き（外向き）にする
+        return mergeGeometries([dome, cap]);
     } else {
-        geo = new THREE.SphereGeometry(0.5, 32, 16);
+        return new THREE.SphereGeometry(0.5, 32, 16);
     }
-    return geo;
 }
 
-function getHoleScale(mode, sx, sy, sz) {
-    // Box: dimensions are already baked. Sphere/Hemi: scale unit sphere.
-    if (mode === 'box') return new THREE.Vector3(1, 1, 1);
-    return new THREE.Vector3(sx, sy, sz);
-}
-
-function updateGhostGeo() {
-    if (!ghostMesh) return;
-    const { sx, sy, sz } = getHoleSizes();
-    ghostMesh.geometry.dispose();
-    ghostMesh.geometry = makeHoleGeo(holeMode, sx, sy, sz);
-    const s = getHoleScale(holeMode, sx, sy, sz);
-    ghostMesh.scale.copy(s);
-}
-
+/* ─── Ghost helpers ─── */
 function showGhost() {
+    // Remove existing ghost
     if (ghostMesh) {
+        holeTransform.detach();
         scene.remove(ghostMesh);
         ghostMesh.geometry.dispose();
         ghostMesh = null;
     }
     if (!holeMode) return;
-    const { sx, sy, sz } = getHoleSizes();
-    const geo = makeHoleGeo(holeMode, sx, sy, sz);
+
+    const geo = makeHoleGeo(holeMode);
     const mat = new THREE.MeshBasicMaterial({
         color: 0xff4444,
         transparent: true,
         opacity: 0.35,
         depthWrite: false,
-        wireframe: false,
     });
     ghostMesh = new THREE.Mesh(geo, mat);
-    const s = getHoleScale(holeMode, sx, sy, sz);
-    ghostMesh.scale.copy(s);
-    ghostMesh.visible = false;  // hidden until mouse hits something
+    ghostMesh.scale.set(2, 2, 2); // default size
+
+    // Place at center of existing scene objects (or origin)
+    if (sceneObjects.length) {
+        const bb = new THREE.Box3();
+        sceneObjects.forEach(o => bb.expandByObject(o));
+        const c = new THREE.Vector3();
+        bb.getCenter(c);
+        ghostMesh.position.copy(c);
+        ghostMesh.position.y = Math.max(bb.min.y + 1, 1);
+    } else {
+        ghostMesh.position.set(0, 1, 0);
+    }
+
     scene.add(ghostMesh);
+    holeTransform.attach(ghostMesh);
+    holeTMode = 'translate';
+    holeTransform.setMode('translate');
+    updateHoleModeBtns();
 }
 
-function hideGhost() {
-    if (ghostMesh) ghostMesh.visible = false;
+function cancelHoleMode() {
+    holeMode = null;
+    if (ghostMesh) {
+        holeTransform.detach();
+        scene.remove(ghostMesh);
+        ghostMesh.geometry.dispose();
+        ghostMesh = null;
+    }
+    document.querySelectorAll('.part-btn, .hole-btn').forEach(b => b.classList.remove('active'));
+    updateHoleModeBtns();
+    placingMode = false;
+}
+
+function updateHoleModeBtns() {
+    document.getElementById('hole-btn-translate')?.classList.toggle('active', holeTMode === 'translate');
+    document.getElementById('hole-btn-scale')?.classList.toggle('active', holeTMode === 'scale');
 }
 
 /* ─── Player state ─── */
@@ -127,7 +131,7 @@ drawCamera.position.set(8, 8, 12);
 
 const gameCamera = new THREE.PerspectiveCamera(75, 1, 0.05, 300);
 
-/* ─── Orbit + Transform controls ─── */
+/* ─── Orbit + Transform controls (for parts) ─── */
 const orbit = new OrbitControls(drawCamera, renderer.domElement);
 orbit.enableDamping = true;
 orbit.dampingFactor = 0.08;
@@ -137,6 +141,12 @@ orbit.maxDistance = 120;
 const tfCtrl = new TransformControls(drawCamera, renderer.domElement);
 tfCtrl.addEventListener('dragging-changed', e => { orbit.enabled = !e.value; });
 scene.add(tfCtrl);
+
+/* ─── TransformControls for hole ghost ─── */
+const holeTransform = new TransformControls(drawCamera, renderer.domElement);
+holeTransform.addEventListener('dragging-changed', e => { orbit.enabled = !e.value; });
+holeTransform.setMode('translate');
+scene.add(holeTransform);
 
 /* ─── Lights ─── */
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -310,26 +320,12 @@ function undo() {
     }
 }
 
-/* ─── Canvas events ─── */
-canvas.addEventListener('pointermove', e => {
-    if (mode !== 'draw' || !holeMode || !ghostMesh) return;
-    const rect = canvas.getBoundingClientRect();
-    _mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    _mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(_mouse, drawCamera);
-    const hits = raycaster.intersectObjects(sceneObjects, false);
-    if (hits.length) {
-        ghostMesh.position.copy(hits[0].point);
-        ghostMesh.visible = true;
-    } else {
-        ghostMesh.visible = false;
-    }
-});
-
-canvas.addEventListener('pointerleave', () => { hideGhost(); });
-
+/* ─── Canvas click (draw mode) ─── */
 canvas.addEventListener('pointerdown', e => {
-    if (mode !== 'draw' || tfCtrl.dragging) return;
+    if (mode !== 'draw' || tfCtrl.dragging || holeTransform.dragging) return;
+    // Hole mode: interaction is fully handled by holeTransform (drag handles)
+    if (holeMode) return;
+
     const rect = canvas.getBoundingClientRect();
     _mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     _mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -339,20 +335,15 @@ canvas.addEventListener('pointerdown', e => {
     if (!hits.length) { selectObj(null); return; }
 
     const hit = hits[0];
-
-    if (holeMode && hit.object !== groundMesh) {
-        cutHole(hit.object, hit.point);
-    } else if (placingMode) {
+    if (placingMode) {
         placePart(hit.point.clone().setY(hit.point.y > 0.01 ? hit.point.y : 0));
     } else {
         selectObj(hit.object.name === '__ground__' ? null : hit.object);
     }
 });
 
-/* ─── Cut Hole (CSG) ─── */
-function cutHole(targetMesh, hitPoint) {
-    const { sx, sy, sz } = getHoleSizes();
-
+/* ─── Cut Hole (CSG) — uses ghost position + scale ─── */
+function cutHole(targetMesh, holePos, holeScale) {
     // Target brush in world space
     const targetBrush = new Brush(targetMesh.geometry);
     targetBrush.position.copy(targetMesh.position);
@@ -360,22 +351,19 @@ function cutHole(targetMesh, hitPoint) {
     targetBrush.scale.copy(targetMesh.scale);
     targetBrush.updateMatrixWorld();
 
-    // Hole brush: unit geometry scaled to sx/sy/sz at hit point
-    const holeGeo = makeHoleGeo(holeMode, sx, sy, sz);
+    // Hole brush: unit geometry at ghost position & scale
+    const holeGeo = makeHoleGeo(holeMode);
     const holeBrush = new Brush(holeGeo);
-    holeBrush.position.copy(hitPoint);
-    const hs = getHoleScale(holeMode, sx, sy, sz);
-    holeBrush.scale.copy(hs);
+    holeBrush.position.copy(holePos);
+    holeBrush.scale.copy(holeScale);
     holeBrush.updateMatrixWorld();
 
-    // CSG subtraction
     let resultMesh;
     try {
         resultMesh = csgEvaluator.evaluate(targetBrush, holeBrush, SUBTRACTION);
     } catch (err) {
         console.error('CSG failed:', err);
-        showToast('⚠ 穴あけに失敗しました');
-        return;
+        return false;
     }
 
     const newMesh = new THREE.Mesh(resultMesh.geometry, targetMesh.material.clone());
@@ -394,7 +382,40 @@ function cutHole(targetMesh, hitPoint) {
     if (selectedObj === targetMesh) { tfCtrl.detach(); selectedObj = null; }
 
     undoStack.push({ act: 'csg', oldMesh: targetMesh, newMesh });
-    showToast('🕳️ 穴をあけました');
+    return true;
+}
+
+/* ─── Confirm Hole (Enter キー) ─── */
+function confirmHole() {
+    if (!ghostMesh || !holeMode) return;
+
+    // Find all scene objects whose bounding box overlaps the ghost
+    const ghostBox = new THREE.Box3().setFromObject(ghostMesh);
+    const targets = sceneObjects.filter(o =>
+        ghostBox.intersectsBox(new THREE.Box3().setFromObject(o))
+    );
+
+    if (targets.length === 0) {
+        showToast('⚠ 部材に重なっていません');
+        return;
+    }
+
+    // Snapshot ghost transform before removing it
+    const holePos = ghostMesh.position.clone();
+    const holeScale = ghostMesh.scale.clone();
+
+    holeTransform.detach();
+    scene.remove(ghostMesh);
+    ghostMesh.geometry.dispose();
+    ghostMesh = null;
+
+    let ok = 0;
+    for (const target of targets) {
+        if (cutHole(target, holePos, holeScale)) ok++;
+    }
+
+    if (ok > 0) showToast('🕳️ 穴をあけました');
+    else showToast('⚠ 穴あけに失敗しました');
 }
 
 /* ════════════════════════════════════════════
@@ -404,10 +425,10 @@ function cutHole(targetMesh, hitPoint) {
 // Part palette
 document.querySelectorAll('.part-btn:not(.hole-btn)').forEach(btn => {
     btn.addEventListener('click', () => {
+        if (holeMode) cancelHoleMode();
         selectedPart = btn.dataset.part;
         placingMode = true;
         holeMode = null;
-        hideGhost();
         document.querySelectorAll('.part-btn, .tool-btn[data-mode]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
     });
@@ -425,27 +446,29 @@ document.querySelectorAll('.hole-btn').forEach(btn => {
             selectedObj.material.emissive?.set(0x000000);
             selectedObj = null;
         }
-        showGhost(); // create/refresh ghost mesh for current hole type
+        showGhost();
     });
 });
 
-// XYZ sliders — update ghost geometry live
-['hole-sx', 'hole-sy', 'hole-sz'].forEach(id => {
-    const el = document.getElementById(id);
-    const valEl = document.getElementById(id + '-val');
-    el.addEventListener('input', () => {
-        valEl.textContent = parseFloat(el.value).toFixed(1);
-        updateGhostGeo();
-    });
+// Hole transform mode buttons
+document.getElementById('hole-btn-translate')?.addEventListener('click', () => {
+    holeTMode = 'translate';
+    if (ghostMesh) holeTransform.setMode('translate');
+    updateHoleModeBtns();
 });
 
-// Transform tools
+document.getElementById('hole-btn-scale')?.addEventListener('click', () => {
+    holeTMode = 'scale';
+    if (ghostMesh) holeTransform.setMode('scale');
+    updateHoleModeBtns();
+});
+
+// Transform tools (for parts)
 document.querySelectorAll('.tool-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
         tMode = btn.dataset.mode;
         placingMode = false;
-        holeMode = null;
-        hideGhost();
+        if (holeMode) cancelHoleMode();
         document.querySelectorAll('.tool-btn[data-mode], .part-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         if (selectedObj) tfCtrl.setMode(tMode);
@@ -476,6 +499,11 @@ document.addEventListener('keydown', e => {
             e.preventDefault();
         return;
     }
+    // 穴あけモード: Enter で確定、ESC でキャンセル
+    if (holeMode) {
+        if (e.key === 'Enter') { e.preventDefault(); confirmHole(); return; }
+        if (e.code === 'Escape') { cancelHoleMode(); return; }
+    }
     if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
 });
@@ -486,6 +514,7 @@ document.getElementById('btn-undo').addEventListener('click', undo);
 
 document.getElementById('btn-clear').addEventListener('click', () => {
     if (!confirm('シーンをクリアしますか？')) return;
+    if (holeMode) cancelHoleMode();
     sceneObjects.forEach(m => scene.remove(m));
     sceneObjects = []; undoStack = [];
     tfCtrl.detach(); selectedObj = null;
@@ -534,6 +563,7 @@ fileInput.addEventListener('change', e => {
     reader.onload = (event) => {
         try {
             const data = JSON.parse(event.target.result);
+            if (holeMode) cancelHoleMode();
             sceneObjects.forEach(m => scene.remove(m));
             sceneObjects = []; undoStack = []; tfCtrl.detach(); selectedObj = null;
 
@@ -591,6 +621,7 @@ document.getElementById('btn-play').addEventListener('click', enterGame);
 document.getElementById('btn-exit').addEventListener('click', exitGame);
 
 function enterGame() {
+    if (holeMode) cancelHoleMode();
     mode = 'play';
     document.getElementById('side-panel').style.display = 'none';
     document.getElementById('game-hud').classList.add('active');
@@ -758,9 +789,38 @@ window.addEventListener('resize', onResize);
 onResize();
 
 const clock = new THREE.Clock();
+
+/* ─── WASD カメラ移動 (お絵描きモード) ─── */
+const _camRight = new THREE.Vector3();
+const _camForward = new THREE.Vector3();
+const _camDelta = new THREE.Vector3();
+
+function tickDrawCamera(dt) {
+    // 入力フォーカス中は動かさない
+    if (document.activeElement?.matches('input, textarea, select')) return;
+
+    const speed = 12 * dt;
+    drawCamera.getWorldDirection(_camForward);
+    _camForward.y = 0;
+    if (_camForward.lengthSq() < 0.0001) return;
+    _camForward.normalize();
+    _camRight.crossVectors(_camForward, new THREE.Vector3(0, 1, 0)).normalize();
+
+    _camDelta.set(0, 0, 0);
+    if (keys['KeyW']) _camDelta.addScaledVector(_camForward, speed);
+    if (keys['KeyS']) _camDelta.addScaledVector(_camForward, -speed);
+    if (keys['KeyA']) _camDelta.addScaledVector(_camRight, -speed);
+    if (keys['KeyD']) _camDelta.addScaledVector(_camRight, speed);
+
+    if (_camDelta.lengthSq() > 0) {
+        drawCamera.position.add(_camDelta);
+        orbit.target.add(_camDelta);
+    }
+}
+
 (function animate() {
     requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
-    if (mode === 'draw') { orbit.update(); renderer.render(scene, drawCamera); }
+    if (mode === 'draw') { tickDrawCamera(dt); orbit.update(); renderer.render(scene, drawCamera); }
     else { tickGame(dt); renderer.render(scene, gameCamera); }
 })();
