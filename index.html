@@ -8,12 +8,14 @@
   <meta name="description" content="3Dのお絵描きソフト＋ちびっこになって入り込む探検ゲーム" />
   <link rel="stylesheet" href="style.css" />
 
-  <!-- Three.js r160 import map -->
+  <!-- Three.js r160 & CSG import map -->
   <script type="importmap">
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.3/build/index.module.js",
+      "three-bvh-csg": "https://cdn.jsdelivr.net/npm/three-bvh-csg@0.0.16/build/index.module.js"
     }
   }
   </script>
@@ -73,6 +75,29 @@
           </div>
           <p style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5;">
             部材を選んでクリックで配置。<br>次に移動ツールで位置調整。
+          </p>
+        </div>
+
+        <div class="panel-section">
+          <h3>🧱 穴あけツール</h3>
+          <div id="hole-palette" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <button class="part-btn hole-btn" data-hole="box">
+              <span class="icon">🕳️</span>四角穴
+            </button>
+            <button class="part-btn hole-btn" data-hole="hemisphere">
+              <span class="icon">🕳️</span>半球穴
+            </button>
+            <button class="part-btn hole-btn" data-hole="sphere">
+              <span class="icon">🕳️</span>丸型穴
+            </button>
+          </div>
+
+          <div style="margin-top:10px;">
+            <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">穴の大きさ</label>
+            <input type="range" id="hole-size" min="0.5" max="5.0" step="0.1" value="2.0" style="width:100%;">
+          </div>
+          <p style="font-size:10px;color:#64748b;margin-top:6px;line-height:1.5;">
+            穴の種類を選び、部材をクリックしてくり抜きます。
           </p>
         </div>
 

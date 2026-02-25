@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { Evaluator, Brush, SUBTRACTION } from 'three-bvh-csg';
 
 /* ─── Physics constants ─── */
 const GRAVITY = -20;
@@ -23,6 +24,9 @@ let sceneObjects = [];
 let currentColor = '#6c63ff';
 let undoStack = [];
 let placingMode = false;
+let holeMode = null;   // 'box' | 'hemisphere' | 'sphere' | null
+const csgEvaluator = new Evaluator();
+csgEvaluator.attributes = ['position', 'normal'];
 
 /* ─── Player state ─── */
 const player = { vel: new THREE.Vector3(), onGround: false, yaw: 0, pitch: 0 };
@@ -218,9 +222,17 @@ function undo() {
         scene.remove(last.mesh);
         sceneObjects = sceneObjects.filter(o => o !== last.mesh);
         if (selectedObj === last.mesh) { tfCtrl.detach(); selectedObj = null; }
-    } else {
+    } else if (last.act === 'remove') {
         scene.add(last.mesh);
         sceneObjects.push(last.mesh);
+    } else if (last.act === 'csg') {
+        // Revert CSG: remove the modified mesh, restore the original
+        scene.remove(last.newMesh);
+        sceneObjects = sceneObjects.filter(o => o !== last.newMesh);
+        if (selectedObj === last.newMesh) { tfCtrl.detach(); selectedObj = null; }
+
+        scene.add(last.oldMesh);
+        sceneObjects.push(last.oldMesh);
     }
 }
 
@@ -236,25 +248,104 @@ canvas.addEventListener('pointerdown', e => {
     if (!hits.length) { selectObj(null); return; }
 
     const hit = hits[0];
-    if (placingMode) {
+
+    if (holeMode && hit.object !== groundMesh) {
+        cutHole(hit.object, hit.point);
+    } else if (placingMode) {
         placePart(hit.point.clone().setY(hit.point.y > 0.01 ? hit.point.y : 0));
     } else {
         selectObj(hit.object.name === '__ground__' ? null : hit.object);
     }
 });
 
+/* ─── Cut Hole (CSG) ─── */
+function cutHole(targetMesh, hitPoint) {
+    const size = parseFloat(document.getElementById('hole-size').value);
+
+    // Create the brush for the target object
+    const targetBrush = new Brush(targetMesh.geometry);
+    targetBrush.position.copy(targetMesh.position);
+    targetBrush.rotation.copy(targetMesh.rotation);
+    targetBrush.scale.copy(targetMesh.scale);
+    targetBrush.updateMatrixWorld();
+
+    // Create the brush for the hole
+    let holeGeo;
+    if (holeMode === 'box') {
+        holeGeo = new THREE.BoxGeometry(size, size, size);
+    } else if (holeMode === 'hemisphere') {
+        holeGeo = new THREE.SphereGeometry(size / 2, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    } else {
+        holeGeo = new THREE.SphereGeometry(size / 2, 32, 16);
+    }
+    const holeBrush = new Brush(holeGeo);
+    holeBrush.position.copy(hitPoint);
+    holeBrush.updateMatrixWorld();
+
+    // Perform CSG subtraction
+    let resultMesh;
+    try {
+        resultMesh = csgEvaluator.evaluate(targetBrush, holeBrush, SUBTRACTION);
+    } catch (err) {
+        console.error("CSG failed:", err);
+        showToast("⚠ 穴あけに失敗しました");
+        return;
+    }
+
+    // Preserve original material and userData
+    // three-bvh-csg creates groups if multiple materials are involved, but we only have 1
+    const newMesh = new THREE.Mesh(resultMesh.geometry, targetMesh.material.clone());
+    newMesh.castShadow = true;
+    newMesh.receiveShadow = true;
+    newMesh.userData = { ...targetMesh.userData, csgMesh: true };
+    // result mesh from CSG is always centered at origin with world coordinates baked in
+    newMesh.position.set(0, 0, 0);
+    newMesh.rotation.set(0, 0, 0);
+    newMesh.scale.set(1, 1, 1);
+
+    // Swap old with new
+    scene.remove(targetMesh);
+    sceneObjects = sceneObjects.filter(o => o !== targetMesh);
+
+    scene.add(newMesh);
+    sceneObjects.push(newMesh);
+
+    if (selectedObj === targetMesh) {
+        tfCtrl.detach();
+        selectedObj = null;
+    }
+
+    undoStack.push({ act: 'csg', oldMesh: targetMesh, newMesh: newMesh });
+    showToast('🕳️ 穴をあけました');
+}
+
 /* ════════════════════════════════════════════
    UI wiring
    ════════════════════════════════════════════ */
 
 // Part palette
-document.querySelectorAll('.part-btn').forEach(btn => {
+document.querySelectorAll('.part-btn:not(.hole-btn)').forEach(btn => {
     btn.addEventListener('click', () => {
         selectedPart = btn.dataset.part;
         placingMode = true;
-        document.querySelectorAll('.part-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tool-btn[data-mode]').forEach(b => b.classList.remove('active'));
+        holeMode = null;
+        document.querySelectorAll('.part-btn, .tool-btn[data-mode]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+    });
+});
+
+// Hole palette
+document.querySelectorAll('.hole-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        holeMode = btn.dataset.hole;
+        placingMode = false;
+        document.querySelectorAll('.part-btn, .tool-btn[data-mode]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (selectedObj) {
+            tfCtrl.detach();
+            selectedObj.material.emissive?.set(0x000000);
+            selectedObj = null;
+        }
     });
 });
 
@@ -263,8 +354,8 @@ document.querySelectorAll('.tool-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => {
         tMode = btn.dataset.mode;
         placingMode = false;
-        document.querySelectorAll('.tool-btn[data-mode]').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.part-btn').forEach(b => b.classList.remove('active'));
+        holeMode = null;
+        document.querySelectorAll('.tool-btn[data-mode], .part-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         if (selectedObj) tfCtrl.setMode(tMode);
     });
@@ -315,23 +406,27 @@ document.getElementById('btn-save').addEventListener('click', () => {
         showToast('⚠ 保存する部材がありません');
         return;
     }
-    const data = sceneObjects.map(m => ({
-        type: m.userData.partType,
-        color: '#' + m.material.color.getHexString(),
-        pos: m.position.toArray(),
-        rot: [m.rotation.x, m.rotation.y, m.rotation.z],
-        scl: m.scale.toArray(),
-    }));
+    const data = sceneObjects.map(m => {
+        const base = {
+            type: m.userData.partType,
+            color: '#' + m.material.color.getHexString(),
+            pos: m.position.toArray(),
+            rot: [m.rotation.x, m.rotation.y, m.rotation.z],
+            scl: m.scale.toArray(),
+        };
+        // CSG-modified meshes have world positions baked in; save the vertex buffer
+        if (m.userData.csgMesh) {
+            const posAttr = m.geometry.getAttribute('position');
+            base.csgVertices = Array.from(posAttr.array);
+        }
+        return base;
+    });
 
-    // Create JSON blob and trigger download
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'my_3d_work.json';
-    a.click();
+    a.href = url; a.download = 'my_3d_work.json'; a.click();
     URL.revokeObjectURL(url);
-
     showToast('💾 ファイルをダウンロードしました');
 });
 
@@ -348,16 +443,36 @@ fileInput.addEventListener('change', e => {
     reader.onload = (event) => {
         try {
             const data = JSON.parse(event.target.result);
-            // Clear current scene
             sceneObjects.forEach(m => scene.remove(m));
             sceneObjects = []; undoStack = []; tfCtrl.detach(); selectedObj = null;
 
-            // Rebuild scene
             data.forEach(d => {
-                const m = makePart(d.type, d.color);
-                m.position.fromArray(d.pos);
-                m.rotation.set(d.rot[0], d.rot[1], d.rot[2]);
-                m.scale.fromArray(d.scl);
+                let m;
+                if (d.csgVertices) {
+                    // Reconstruct CSG mesh from raw vertex buffer
+                    const geo = new THREE.BufferGeometry();
+                    geo.setAttribute('position',
+                        new THREE.BufferAttribute(new Float32Array(d.csgVertices), 3));
+                    geo.computeVertexNormals();
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color(d.color),
+                        roughness: 0.5,
+                        metalness: 0.15,
+                    });
+                    m = new THREE.Mesh(geo, mat);
+                    m.userData = { partType: d.type, csgMesh: true };
+                    m.castShadow = true;
+                    m.receiveShadow = true;
+                    // CSG meshes already have world coords baked in
+                    m.position.set(0, 0, 0);
+                    m.rotation.set(0, 0, 0);
+                    m.scale.set(1, 1, 1);
+                } else {
+                    m = makePart(d.type, d.color);
+                    m.position.fromArray(d.pos);
+                    m.rotation.set(d.rot[0], d.rot[1], d.rot[2]);
+                    m.scale.fromArray(d.scl);
+                }
                 scene.add(m); sceneObjects.push(m);
             });
             showToast('📂 ファイルを読み込みました！');
@@ -367,7 +482,6 @@ fileInput.addEventListener('change', e => {
         }
     };
     reader.readAsText(file);
-    // Reset input so the same file can be loaded again if needed
     e.target.value = '';
 });
 
