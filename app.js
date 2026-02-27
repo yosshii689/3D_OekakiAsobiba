@@ -124,7 +124,7 @@ const keys = {};
    Three.js bootstrap
    ════════════════════════════════════════════ */
 const canvas = document.getElementById('three-canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -132,8 +132,70 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 
 const scene = new THREE.Scene();
-// CSS の背景画像（Haikei.png）が見えるように、シーンの背景色は透明（null）のままにします
+scene.background = new THREE.Color(0x1a1d27);
 scene.fog = new THREE.FogExp2(0x1a1d27, 0.025);
+
+// ─── スカイ円柱: 縦方向の歪みがない円柱形の背景 ───
+// 球面と違い、縦方向の歪みがゼロ。底辺 y=0（地平線）に配置。
+const skyDomeGeo = new THREE.CylinderGeometry(
+    240,    // 上面半径
+    240,    // 下面半径
+    180,    // 高さ (bottom y=0 → top y=180)
+    64,     // 周方向の分割数
+    1,      // 高さ方向の分割数
+    true    // 上下のキャップなし（開口部）
+);
+// 中心が y=0 なので y=90 上にずらして底辺を地面（y=0）に合わせる
+skyDomeGeo.translate(0, 90, 0);
+
+// UV の U 座標を 10 倍して横 10 枚タイルに（縦は歪みなしで1枚そのまま）
+const _uvAttr = skyDomeGeo.attributes.uv;
+for (let i = 0; i < _uvAttr.count; i++) {
+    _uvAttr.setX(i, _uvAttr.getX(i) * 2);
+}
+_uvAttr.needsUpdate = true;
+
+const skyTex = new THREE.TextureLoader().load('Haikei.png');
+skyTex.wrapS = THREE.RepeatWrapping;
+const skyDomeMat = new THREE.MeshBasicMaterial({
+    map: skyTex,
+    side: THREE.BackSide,  // 内側から見る
+    fog: false,
+});
+const skyDome = new THREE.Mesh(skyDomeGeo, skyDomeMat);
+scene.add(skyDome);
+
+// ─── 空ドーム: 円柱の上端にかぶせる上半球 ───
+// 半径 240 の上半球を y=180 に配置（円柱の上端にぴったり合わせる）
+const skyCapGeo = new THREE.SphereGeometry(
+    240,          // 半径
+    64,           // 横分割数
+    32,           // 縦分割数
+    0,            // phiStart
+    Math.PI * 2,  // phiLength（全周）
+    0,            // thetaStart（頂上から）
+    Math.PI / 2   // thetaLength（上半球のみ）
+);
+skyCapGeo.translate(0, 180, 0); // 円柱上端 y=180 に底辺を合わせる
+
+// UV: U×2（横2枚タイル）、V を [0.5,1]→[0,1] にリマップ（画像全体を使う）
+const _capUV = skyCapGeo.attributes.uv;
+for (let i = 0; i < _capUV.count; i++) {
+    _capUV.setX(i, _capUV.getX(i) * 2);
+    _capUV.setY(i, (_capUV.getY(i) - 0.5) * 2);
+}
+_capUV.needsUpdate = true;
+
+const skyCapTex = new THREE.TextureLoader().load('SoraDome.png');
+skyCapTex.wrapS = THREE.RepeatWrapping;
+const skyCapMat = new THREE.MeshBasicMaterial({
+    map: skyCapTex,
+    side: THREE.BackSide,
+    fog: false,
+});
+const skyCap = new THREE.Mesh(skyCapGeo, skyCapMat);
+scene.add(skyCap);
+
 
 /* ─── Cameras ─── */
 const drawCamera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
