@@ -13,8 +13,11 @@ import { Evaluator, Brush, SUBTRACTION } from 'three-bvh-csg';
 const GRAVITY = -20;
 const JUMP_VEL = 9;
 const MOVE_SPD = 6;
-const PLAYER_H = 0.9;   // capsule height
-const PLAYER_R = 0.32;  // capsule radius
+const PLAYER_H = 0.9;      // capsule height (standing)
+const PLAYER_H_CROUCH = 0.45;  // capsule height (crouching)
+const PLAYER_R = 0.32;     // capsule radius
+const SLIDE_MAX_SPD = 30;  // 最高スライド速度 (m/s) ← 2倍に増速
+const SLOPE_LIMIT = 0.707; // cos(45°): これ以下の法線Y成分は「壁」とみなす
 
 /* ─── App state ─── */
 let mode = 'draw'; // 'draw' | 'play'
@@ -107,14 +110,21 @@ function updateHoleModeBtns() {
 }
 
 /* ─── Player state ─── */
-const player = { vel: new THREE.Vector3(), onGround: false, yaw: 0, pitch: 0 };
+const player = {
+    vel: new THREE.Vector3(),
+    onGround: false,
+    yaw: 0, pitch: 0,
+    isCrouching: false,
+    isSliding: false,
+    groundNormal: new THREE.Vector3(0, 1, 0),  // 今立っている面の法線
+};
 const keys = {};
 
 /* ════════════════════════════════════════════
    Three.js bootstrap
    ════════════════════════════════════════════ */
 const canvas = document.getElementById('three-canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -122,7 +132,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1d27);
+// CSS の背景画像（Haikei.png）が見えるように、シーンの背景色は透明（null）のままにします
 scene.fog = new THREE.FogExp2(0x1a1d27, 0.025);
 
 /* ─── Cameras ─── */
@@ -207,12 +217,14 @@ scene.add(playerGroup);
 /* ════════════════════════════════════════════
    Geometry factories
    ════════════════════════════════════════════ */
-function makePart(type, color) {
+function makePart(type, color, opacity = 1) {
     let geo;
     const mat = new THREE.MeshStandardMaterial({
         color: new THREE.Color(color),
         roughness: 0.5,
         metalness: 0.15,
+        transparent: opacity < 1,
+        opacity: opacity,
     });
 
     switch (type) {
@@ -262,7 +274,7 @@ const raycaster = new THREE.Raycaster();
 const _mouse = new THREE.Vector2();
 
 function placePart(point) {
-    const mesh = makePart(selectedPart, currentColor);
+    const mesh = makePart(selectedPart, currentColor, currentOpacity);
     mesh.position.copy(point);
     // Lift so bottom sits on surface
     const box = new THREE.Box3().setFromObject(mesh);
@@ -482,11 +494,32 @@ document.getElementById('color-picker').addEventListener('input', e => {
 });
 
 // Preset Colors
+let currentOpacity = 1.0; // 現在選択中の不透明度
+
+// 半透明スウォッチの背景を JS で組み立てる（--pc CSS変数はrgba()と直接使えないため）
+document.querySelectorAll('.preset-color--alpha').forEach(sw => {
+    const hex = sw.dataset.color;
+    // hex → rgb 変換
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    sw.style.background = `
+        linear-gradient(rgba(${r},${g},${b},0.38), rgba(${r},${g},${b},0.38)),
+        repeating-conic-gradient(#555 0% 25%, #888 0% 50%) 0 0 / 8px 8px
+    `;
+});
+
 document.querySelectorAll('.preset-color').forEach(btn => {
     btn.addEventListener('click', () => {
         currentColor = btn.dataset.color;
+        currentOpacity = parseFloat(btn.dataset.opacity ?? '1');
         document.getElementById('color-picker').value = currentColor;
-        if (selectedObj) selectedObj.material.color.set(currentColor);
+        if (selectedObj) {
+            selectedObj.material.color.set(currentColor);
+            selectedObj.material.transparent = currentOpacity < 1;
+            selectedObj.material.opacity = currentOpacity;
+            selectedObj.material.needsUpdate = true;
+        }
     });
 });
 
@@ -530,6 +563,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
         const base = {
             type: m.userData.partType,
             color: '#' + m.material.color.getHexString(),
+            opacity: m.material.opacity ?? 1,
             pos: m.position.toArray(),
             rot: [m.rotation.x, m.rotation.y, m.rotation.z],
             scl: m.scale.toArray(),
@@ -579,6 +613,8 @@ fileInput.addEventListener('change', e => {
                         color: new THREE.Color(d.color),
                         roughness: 0.5,
                         metalness: 0.15,
+                        transparent: (d.opacity ?? 1) < 1,
+                        opacity: d.opacity ?? 1,
                     });
                     m = new THREE.Mesh(geo, mat);
                     m.userData = { partType: d.type, csgMesh: true };
@@ -589,7 +625,7 @@ fileInput.addEventListener('change', e => {
                     m.rotation.set(0, 0, 0);
                     m.scale.set(1, 1, 1);
                 } else {
-                    m = makePart(d.type, d.color);
+                    m = makePart(d.type, d.color, d.opacity ?? 1);
                     m.position.fromArray(d.pos);
                     m.rotation.set(d.rot[0], d.rot[1], d.rot[2]);
                     m.scale.fromArray(d.scl);
@@ -676,8 +712,10 @@ const _VEC_DOWN = new THREE.Vector3(0, -1, 0);
 const _VEC_UP = new THREE.Vector3(0, 1, 0);
 
 function resolveCollisions(pos, vel) {
-    const r = PLAYER_R, h = PLAYER_H;
+    const r = PLAYER_R;
+    const h = player.isCrouching ? PLAYER_H_CROUCH : PLAYER_H;
     player.onGround = false;
+    player.groundNormal.set(0, 1, 0);
 
     // 地面 (y=0 の床)
     if (pos.y <= 0.001) {
@@ -690,11 +728,17 @@ function resolveCollisions(pos, vel) {
     // ── 床: 足元から下向きレイ ──
     _colRay.set(new THREE.Vector3(pos.x, pos.y + 0.15, pos.z), _VEC_DOWN);
     const floorHits = _colRay.intersectObjects(sceneObjects, false)
-        .filter(hit => hit.distance <= 0.25);
+        .filter(hit => hit.distance <= 0.3);
     if (floorHits.length && vel.y <= 0) {
         pos.y = floorHits[0].point.y;
         vel.y = 0;
         player.onGround = true;
+        // 面の法線を記録（傾き検知に使用）
+        if (floorHits[0].face) {
+            const n = floorHits[0].face.normal.clone();
+            n.applyQuaternion(floorHits[0].object.quaternion).normalize();
+            player.groundNormal.copy(n);
+        }
     }
 
     // ── 天井: 頭上から上向きレイ ──
@@ -704,9 +748,8 @@ function resolveCollisions(pos, vel) {
     if (ceilHits.length && vel.y > 0) vel.y = 0;
 
     // ── 壁: 4方向 × 3高さ の水平レイ ──
-    // 3サンプル中 2つ以上が壁に当たった方向だけ押し返す。
     // 穴の部分ではレイが貫通するので当たり数が減り、押し返しが抑制される。
-    const wHeights = [pos.y + 0.2, pos.y + h * 0.45, pos.y + h * 0.8];
+    const wHeights = [pos.y + 0.2, pos.y + h * 0.45, pos.y + h * 0.85];
     const wDirs = [
         new THREE.Vector3(1, 0, 0),
         new THREE.Vector3(-1, 0, 0),
@@ -716,28 +759,78 @@ function resolveCollisions(pos, vel) {
     for (const dir of wDirs) {
         let hitCount = 0;
         let minDist = Infinity;
+        let hitNormalY = 1;
         for (const wy of wHeights) {
             _colRay.set(new THREE.Vector3(pos.x, wy, pos.z), dir);
             const wallHits = _colRay.intersectObjects(sceneObjects, false)
                 .filter(hit => hit.distance < r + 0.04);
             if (wallHits.length) {
                 hitCount++;
-                minDist = Math.min(minDist, wallHits[0].distance);
+                if (wallHits[0].distance < minDist) {
+                    minDist = wallHits[0].distance;
+                    // 壁の法線Y成分を取得（急すぎる壁は垂直速度をカット）
+                    if (wallHits[0].face) {
+                        const wn = wallHits[0].face.normal.clone();
+                        wn.applyQuaternion(wallHits[0].object.quaternion);
+                        hitNormalY = Math.abs(wn.y);
+                    }
+                }
             }
         }
-        // 穴がある = 一部のレイが通り抜け → hitCount < 2 なら押し返さない
         if (hitCount >= 2) {
             const push = r + 0.04 - minDist;
             pos.x -= dir.x * push;
             pos.z -= dir.z * push;
+            // 法線Yが SLOPE_LIMIT 以上 ＝「ほぼ水平な面」→ 壁として上昇をカット
+            // 急な壁(hitNormalY < SLOPE_LIMIT)は垂直成分も抑える
+            if (hitNormalY < SLOPE_LIMIT && vel.y > 0) {
+                vel.y *= hitNormalY; // 急な壁への衝突で上昇速度を大幅減衰
+            }
         }
     }
 }
 
 
 /* ─── Game tick (一人称・マインクラフト式) ─── */
+// しゃがみへの立ち上がり確認: 頭上に空間があるか?
+function canStandUp(pos) {
+    const checkH = PLAYER_H - PLAYER_H_CROUCH; // 増える高さ分チェック
+    _colRay.set(
+        new THREE.Vector3(pos.x, pos.y + PLAYER_H_CROUCH, pos.z),
+        _VEC_UP
+    );
+    const hits = _colRay.intersectObjects(sceneObjects, false)
+        .filter(h => h.distance < checkH + 0.1);
+    // 地面(y=0)は天井扱いしない
+    return hits.length === 0;
+}
+
 function tickGame(dt) {
     const pos = playerGroup.position;
+
+    // ── しゃがみ判定 ──
+    const wantCrouch = !!keys['ShiftLeft'] || !!keys['ShiftRight'];
+    if (wantCrouch) {
+        player.isCrouching = true;
+    } else if (player.isCrouching) {
+        // 立ち上がる前に頭上チェック
+        if (canStandUp(pos)) player.isCrouching = false;
+    }
+
+    // ── 坂道スライド判定 ──
+    // groundNormal.y が SLOPE_LIMIT 未満 = 45度以上の坂 → しゃがみ中はスライド
+    const slopeY = player.groundNormal.y;
+    const onSlope = player.onGround && slopeY < SLOPE_LIMIT && slopeY > 0.1;
+    player.isSliding = player.isCrouching && onSlope;
+
+    // ── HUD 更新 ──
+    const hudSlide = document.getElementById('hud-slide');
+    if (hudSlide) {
+        hudSlide.style.display = player.isCrouching
+            ? (player.isSliding ? 'block' : 'block')
+            : 'none';
+        hudSlide.textContent = player.isSliding ? '🏂 スライディング!' : '🦆 しゃがみ中';
+    }
 
     // 移動方向: yaw だけで水平方向を決定（上を向いても上昇しない）
     const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
@@ -749,11 +842,38 @@ function tickGame(dt) {
     if (keys['KeyD'] || keys['ArrowRight']) dir.addScaledVector(right, 1);
     if (dir.lengthSq() > 0) dir.normalize();
 
-    player.vel.x = dir.x * MOVE_SPD;
-    player.vel.z = dir.z * MOVE_SPD;
-    player.vel.y += GRAVITY * dt;
+    // ── 速度計算 ──
+    if (player.isSliding) {
+        // スライディング中: WASD 操作を無効にして坂の重力成分だけ加速
+        // 滑走方向 = 重力ベクトル - (重力⋅法線)×法線  (坂面への投影)
+        const gravVec = new THREE.Vector3(0, GRAVITY * dt, 0);
+        const dot = gravVec.dot(player.groundNormal);
+        const slideAcc = gravVec.clone().addScaledVector(player.groundNormal, -dot);
+        player.vel.x += slideAcc.x;
+        player.vel.z += slideAcc.z;
+        player.vel.y += GRAVITY * dt;
 
-    if (keys['Space'] && player.onGround) {
+        // 空気抵抗(終端速度収束) ← 弱めて加速しやすく
+        player.vel.x *= 0.998;
+        player.vel.z *= 0.998;
+
+        // 速度リミット (水平成分)
+        const hSpd = Math.sqrt(player.vel.x ** 2 + player.vel.z ** 2);
+        if (hSpd > SLIDE_MAX_SPD) {
+            const ratio = SLIDE_MAX_SPD / hSpd;
+            player.vel.x *= ratio;
+            player.vel.z *= ratio;
+        }
+    } else {
+        // 通常移動: しゃがみ中はスピードを半分に
+        const spd = player.isCrouching ? MOVE_SPD * 0.5 : MOVE_SPD;
+        player.vel.x = dir.x * spd;
+        player.vel.z = dir.z * spd;
+        player.vel.y += GRAVITY * dt;
+    }
+
+    // ジャンプ (しゃがみ中は不可)
+    if (keys['Space'] && player.onGround && !player.isCrouching) {
         player.vel.y = JUMP_VEL;
         player.onGround = false;
     }
@@ -763,12 +883,18 @@ function tickGame(dt) {
     pos.z += player.vel.z * dt;
 
     // 落下しすぎたらリスポーン
-    if (pos.y < -30) { pos.y = 5; player.vel.set(0, 0, 0); }
+    if (pos.y < -30) {
+        pos.y = 5;
+        player.vel.set(0, 0, 0);
+        player.isCrouching = false;
+        player.isSliding = false;
+    }
 
     resolveCollisions(pos, player.vel);
 
     // ─── 一人称カメラ: 目の高さに配置してyaw/pitch で回転 ───
-    const eyeY = pos.y + PLAYER_H * 0.88;
+    const curH = player.isCrouching ? PLAYER_H_CROUCH : PLAYER_H;
+    const eyeY = pos.y + curH * 0.88;
     gameCamera.position.set(pos.x, eyeY, pos.z);
     // Euler順序 YXZ がFPS的な回転に最適
     gameCamera.rotation.order = 'YXZ';

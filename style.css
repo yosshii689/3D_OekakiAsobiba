@@ -23,7 +23,10 @@
 
 body {
   font-family: 'Noto Sans JP', sans-serif;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: url('Haikei.png');
+  background-repeat: repeat;
+  background-size: auto;
   color: var(--text);
   overflow: hidden;
   height: 100vh;
@@ -186,9 +189,6 @@ body {
 
 /* Preset color swatches */
 #preset-colors {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
   margin-top: 10px;
 }
 
@@ -204,6 +204,14 @@ body {
 .preset-color:hover {
   transform: scale(1.1);
   border-color: #fff;
+}
+
+/* 半透明スウォッチ: チェッカー背景の上に色を半透明で重ねる */
+.preset-color--alpha {
+  background:
+    linear-gradient(rgba(var(--pc-rgb, 128, 128, 128), 0.35), rgba(var(--pc-rgb, 128, 128, 128), 0.35)),
+    repeating-conic-gradient(#555 0% 25%, #888 0% 50%) 0 0 / 8px 8px;
+  /* CSS変数で色を指定できないブラウザ向け: 色はインラインスタイルで上書きする */
 }
 
 /* XYZ axis sliders for hole tool */

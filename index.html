@@ -116,20 +116,61 @@
           <input type="color" id="color-picker" value="#6c63ff" />
 
           <!-- Preset Colors -->
-          <div id="preset-colors" style="display:grid;grid-template-columns:repeat(4, 1fr);gap:4px;margin-top:8px;">
-            <!-- 12 colors requested: 赤、青、黄、緑、黒、白、茶、黄緑、水色、ピンク、オレンジ、紫 -->
-            <div class="preset-color" style="background:#ff0000;" data-color="#ff0000" title="赤"></div>
-            <div class="preset-color" style="background:#0000ff;" data-color="#0000ff" title="青"></div>
-            <div class="preset-color" style="background:#ffff00;" data-color="#ffff00" title="黄"></div>
-            <div class="preset-color" style="background:#008000;" data-color="#008000" title="緑"></div>
-            <div class="preset-color" style="background:#000000;" data-color="#000000" title="黒"></div>
-            <div class="preset-color" style="background:#ffffff;" data-color="#ffffff" title="白"></div>
-            <div class="preset-color" style="background:#8b4513;" data-color="#8b4513" title="茶"></div>
-            <div class="preset-color" style="background:#9acd32;" data-color="#9acd32" title="黄緑"></div>
-            <div class="preset-color" style="background:#00ffff;" data-color="#00ffff" title="水色"></div>
-            <div class="preset-color" style="background:#ffc0cb;" data-color="#ffc0cb" title="ピンク"></div>
-            <div class="preset-color" style="background:#ffa500;" data-color="#ffa500" title="オレンジ"></div>
-            <div class="preset-color" style="background:#800080;" data-color="#800080" title="紫"></div>
+          <div id="preset-colors" style="margin-top:8px;">
+            <p style="font-size:9px;color:#64748b;margin:0 0 3px;">▌ 不透明</p>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px;">
+              <div class="preset-color" style="background:#ff0000;" data-color="#ff0000" data-opacity="1" title="赤">
+              </div>
+              <div class="preset-color" style="background:#0000ff;" data-color="#0000ff" data-opacity="1" title="青">
+              </div>
+              <div class="preset-color" style="background:#ffff00;" data-color="#ffff00" data-opacity="1" title="黄">
+              </div>
+              <div class="preset-color" style="background:#008000;" data-color="#008000" data-opacity="1" title="緑">
+              </div>
+              <div class="preset-color" style="background:#000000;" data-color="#000000" data-opacity="1" title="黒">
+              </div>
+              <div class="preset-color" style="background:#ffffff;" data-color="#ffffff" data-opacity="1" title="白">
+              </div>
+              <div class="preset-color" style="background:#8b4513;" data-color="#8b4513" data-opacity="1" title="茶">
+              </div>
+              <div class="preset-color" style="background:#9acd32;" data-color="#9acd32" data-opacity="1" title="黄緑">
+              </div>
+              <div class="preset-color" style="background:#00ffff;" data-color="#00ffff" data-opacity="1" title="水色">
+              </div>
+              <div class="preset-color" style="background:#ffc0cb;" data-color="#ffc0cb" data-opacity="1" title="ピンク">
+              </div>
+              <div class="preset-color" style="background:#ffa500;" data-color="#ffa500" data-opacity="1" title="オレンジ">
+              </div>
+              <div class="preset-color" style="background:#800080;" data-color="#800080" data-opacity="1" title="紫">
+              </div>
+            </div>
+            <p style="font-size:9px;color:#64748b;margin:0 0 3px;">▌ 半透明 (opacity 35%)</p>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">
+              <div class="preset-color preset-color--alpha" style="--pc:#ff0000;" data-color="#ff0000"
+                data-opacity="0.35" title="赤（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#0000ff;" data-color="#0000ff"
+                data-opacity="0.35" title="青（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#ffff00;" data-color="#ffff00"
+                data-opacity="0.35" title="黄（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#008000;" data-color="#008000"
+                data-opacity="0.35" title="緑（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#000000;" data-color="#000000"
+                data-opacity="0.35" title="黒（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#ffffff;" data-color="#ffffff"
+                data-opacity="0.35" title="白（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#8b4513;" data-color="#8b4513"
+                data-opacity="0.35" title="茶（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#9acd32;" data-color="#9acd32"
+                data-opacity="0.35" title="黄緑（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#00ffff;" data-color="#00ffff"
+                data-opacity="0.35" title="水色（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#ffc0cb;" data-color="#ffc0cb"
+                data-opacity="0.35" title="ピンク（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#ffa500;" data-color="#ffa500"
+                data-opacity="0.35" title="オレンジ（半透明）"></div>
+              <div class="preset-color preset-color--alpha" style="--pc:#800080;" data-color="#800080"
+                data-opacity="0.35" title="紫（半透明）"></div>
+            </div>
           </div>
         </div>
 
@@ -182,8 +223,17 @@
   <div id="game-hud">
     <div id="hud-top">
       <strong>🏃 ちびっこ探検モード</strong><br>
-      WASD / 矢印：移動 &nbsp;|&nbsp; スペース：ジャンプ &nbsp;|&nbsp; マウス：カメラ &nbsp;|&nbsp; ESC：戻る
+      WASD / 矢印：移動 &nbsp;|&nbsp; スペース：ジャンプ &nbsp;|&nbsp; <strong>Shift：しゃがみ/スライド</strong> &nbsp;|&nbsp; マウス：カメラ
+      &nbsp;|&nbsp; ESC：戻る
     </div>
+    <div id="hud-slide" style="
+      position:fixed;top:90px;left:50%;transform:translateX(-50%);
+      background:rgba(30,40,100,0.85);border:1px solid #4f6ef7;
+      border-radius:20px;padding:6px 20px;
+      font-size:14px;font-weight:700;color:#c7d2fe;
+      display:none;pointer-events:none;z-index:400;
+      text-shadow:0 0 8px #4f6ef7;
+    "></div>
     <div id="crosshair"></div>
     <button id="btn-exit">✕ お絵描きに戻る</button>
   </div>
