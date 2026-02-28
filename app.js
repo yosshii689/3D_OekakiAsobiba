@@ -787,19 +787,25 @@ function resolveCollisions(pos, vel) {
     }
     if (!sceneObjects.length) return;
 
-    // ── 床: 足元から下向きレイ ──
-    _colRay.set(new THREE.Vector3(pos.x, pos.y + 0.15, pos.z), _VEC_DOWN);
+    // ── 床: 足元から下向きレイ（坂道対応: 射程を広く取る）──
+    // レイを pos.y+0.6 から発射し、足元 0.45 ユニット下まで検出する
+    // 旧: origin+0.15 / filter<=0.3 → 足元±0.15 しか見えなかった
+    _colRay.set(new THREE.Vector3(pos.x, pos.y + 0.6, pos.z), _VEC_DOWN);
     const floorHits = _colRay.intersectObjects(sceneObjects, false)
-        .filter(hit => hit.distance <= 0.3);
-    if (floorHits.length && vel.y <= 0) {
-        pos.y = floorHits[0].point.y;
-        vel.y = 0;
-        player.onGround = true;
-        // 面の法線を記録（傾き検知に使用）
-        if (floorHits[0].face) {
-            const n = floorHits[0].face.normal.clone();
-            n.applyQuaternion(floorHits[0].object.quaternion).normalize();
-            player.groundNormal.copy(n);
+        .filter(hit => hit.distance <= 1.05);   // 0.6+0.45 = 足元 0.45m 下まで
+    if (floorHits.length) {
+        const floorY = floorHits[0].point.y;
+        const diff = floorY - pos.y;  // +: 坂を登る  -: 坂を下る
+        // 登り 0.5m・下り 0.45m 以内 かつ 大ジャンプ中でなければスナップ
+        if (diff <= 0.5 && diff >= -0.45 && vel.y <= 0.1) {
+            pos.y = floorY;
+            vel.y = 0;
+            player.onGround = true;
+            if (floorHits[0].face) {
+                const n = floorHits[0].face.normal.clone();
+                n.applyQuaternion(floorHits[0].object.quaternion).normalize();
+                player.groundNormal.copy(n);
+            }
         }
     }
 
