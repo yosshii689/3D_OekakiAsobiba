@@ -886,9 +886,9 @@ function tickGame(dt) {
     }
 
     // ── 坂道スライド判定 ──
-    // groundNormal.y が SLOPE_LIMIT 未満 = 45度以上の坂 → しゃがみ中はスライド
+    // 角度が小さくても（ほぼ平らでなければ）しゃがみ中はスライド可能にする
     const slopeY = player.groundNormal.y;
-    const onSlope = player.onGround && slopeY < SLOPE_LIMIT && slopeY > 0.1;
+    const onSlope = player.onGround && slopeY < 0.999 && slopeY > 0.1;
     player.isSliding = player.isCrouching && onSlope;
 
     // ── HUD 更新 ──
@@ -917,13 +917,17 @@ function tickGame(dt) {
         const gravVec = new THREE.Vector3(0, GRAVITY * dt, 0);
         const dot = gravVec.dot(player.groundNormal);
         const slideAcc = gravVec.clone().addScaledVector(player.groundNormal, -dot);
+
+        // ★ゲーム的な補正: 15度などの浅い角度だと加速が極端に遅いため、滑走加速度を増幅する
+        slideAcc.multiplyScalar(2.5);
+
         player.vel.x += slideAcc.x;
         player.vel.z += slideAcc.z;
         player.vel.y += GRAVITY * dt;
 
-        // 空気抵抗(終端速度収束) ← 弱めて加速しやすく
-        player.vel.x *= 0.998;
-        player.vel.z *= 0.998;
+        // 空気抵抗(摩擦): 0.998 → 0.999 に弱めて減速しにくく（浅い坂でも止まらないように）
+        player.vel.x *= 0.999;
+        player.vel.z *= 0.999;
 
         // 速度リミット (水平成分)
         const hSpd = Math.sqrt(player.vel.x ** 2 + player.vel.z ** 2);
